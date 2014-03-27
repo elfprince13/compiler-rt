@@ -297,17 +297,17 @@ append_if(COMPILER_RT_HAS_WD4722_FLAG /wd4722 SANITIZER_COMMON_CFLAGS)
 
 if(APPLE)
   # Obtain the iOS Simulator SDK path from xcodebuild.
-  execute_process(
-    COMMAND xcodebuild -version -sdk iphonesimulator Path
-    OUTPUT_VARIABLE IOSSIM_SDK_DIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
+  #execute_process(
+  #  COMMAND xcodebuild -version -sdk iphonesimulator Path
+  #  OUTPUT_VARIABLE IOSSIM_SDK_DIR
+  #  OUTPUT_STRIP_TRAILING_WHITESPACE
+  #)
   string(REGEX MATCH "-mmacosx-version-min="
          MACOSX_VERSION_MIN_FLAG "${CMAKE_CXX_FLAGS}")
   set(SANITIZER_COMMON_SUPPORTED_DARWIN_OS osx)
-  if (IOSSIM_SDK_DIR AND NOT MACOSX_VERSION_MIN_FLAG)
-    list(APPEND SANITIZER_COMMON_SUPPORTED_DARWIN_OS iossim)
-  endif()
+  #if (IOSSIM_SDK_DIR AND NOT MACOSX_VERSION_MIN_FLAG)
+  #  list(APPEND SANITIZER_COMMON_SUPPORTED_DARWIN_OS iossim)
+  #endif()
 
   if(COMPILER_RT_USES_LIBCXX)
     set(SANITIZER_MIN_OSX_VERSION 10.7)
@@ -315,13 +315,13 @@ if(APPLE)
     set(SANITIZER_MIN_OSX_VERSION 10.6)
   endif()
   set(DARWIN_osx_CFLAGS -mmacosx-version-min=${SANITIZER_MIN_OSX_VERSION})
-  set(DARWIN_iossim_CFLAGS 
-    -mios-simulator-version-min=7.0 -isysroot ${IOSSIM_SDK_DIR})
+  #set(DARWIN_iossim_CFLAGS 
+  #  -mios-simulator-version-min=7.0 -isysroot ${IOSSIM_SDK_DIR})
   set(DARWIN_osx_LINKFLAGS)
-  set(DARWIN_iossim_LINKFLAGS
-    -Wl,-ios_simulator_version_min,7.0.0
-    -mios-simulator-version-min=7.0
-    -isysroot ${IOSSIM_SDK_DIR})
+  #set(DARWIN_iossim_LINKFLAGS
+  #  -Wl,-ios_simulator_version_min,7.0.0
+  #  -mios-simulator-version-min=7.0
+  #  -isysroot ${IOSSIM_SDK_DIR})
 endif()
 
 # Architectures supported by Sanitizer runtimes. Specific sanitizers may
