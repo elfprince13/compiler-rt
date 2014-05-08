@@ -8,6 +8,7 @@ set(MSAN_RTL_SOURCES
   msan_linux.cc
   msan_new_delete.cc
   msan_report.cc
+  msan_thread.cc
   )
 
 set(MSAN_RTL_CFLAGS ${SANITIZER_COMMON_CFLAGS})
@@ -20,7 +21,7 @@ append_if(COMPILER_RT_HAS_FFREESTANDING_FLAG -ffreestanding MSAN_RTL_CFLAGS)
 add_custom_target(msan)
 set(arch "x86_64")
 if(CAN_TARGET_${arch})
-  add_compiler_rt_static_runtime(clang_rt.msan-${arch} ${arch}
+  add_compiler_rt_runtime(clang_rt.msan-${arch} ${arch} STATIC
     SOURCES ${MSAN_RTL_SOURCES}
             $<TARGET_OBJECTS:RTInterception.${arch}>
             $<TARGET_OBJECTS:RTSanitizerCommon.${arch}>

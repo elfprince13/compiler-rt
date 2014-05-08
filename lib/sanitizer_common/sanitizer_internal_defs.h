@@ -104,12 +104,16 @@ extern "C" {
   void __sanitizer_report_error_summary(const char *error_summary);
 
   SANITIZER_INTERFACE_ATTRIBUTE void __sanitizer_cov_dump();
+  SANITIZER_INTERFACE_ATTRIBUTE void __sanitizer_cov_init();
   SANITIZER_INTERFACE_ATTRIBUTE void __sanitizer_cov();
   SANITIZER_INTERFACE_ATTRIBUTE
   void __sanitizer_annotate_contiguous_container(const void *beg,
                                                  const void *end,
                                                  const void *old_mid,
                                                  const void *new_mid);
+  SANITIZER_INTERFACE_ATTRIBUTE
+  int __sanitizer_verify_contiguous_container(const void *beg, const void *mid,
+                                              const void *end);
 }  // extern "C"
 
 

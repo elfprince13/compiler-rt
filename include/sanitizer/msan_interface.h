@@ -54,6 +54,10 @@ extern "C" {
      memory range, or -1 if the whole range is good. */
   intptr_t __msan_test_shadow(const volatile void *x, size_t size);
 
+  /* Checks that memory range is fully initialized, and reports an error if it
+   * is not. */
+  void __msan_check_mem_is_initialized(const volatile void *x, size_t size);
+
   /* Set exit code when error(s) were detected.
      Value of 0 means don't change the program exit code. */
   void __msan_set_exit_code(int exit_code);
@@ -74,9 +78,9 @@ extern "C" {
      format. */
   void __msan_print_shadow(const volatile void *x, size_t size);
 
-  /* Print current function arguments shadow and origin to stderr in a
+  /* Print shadow for the memory range to stderr in a minimalistic
      human-readable format. */
-  void __msan_print_param_shadow();
+  void __msan_dump_shadow(const volatile void *x, size_t size);
 
   /* Returns true if running under a dynamic tool (DynamoRio-based). */
   int  __msan_has_dynamic_component();

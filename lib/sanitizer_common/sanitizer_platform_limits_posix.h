@@ -274,12 +274,29 @@ namespace __sanitizer {
   typedef unsigned __sanitizer_pthread_key_t;
 #endif
 
+#if SANITIZER_LINUX && !SANITIZER_ANDROID
+  struct __sanitizer_XDR {
+    int x_op;
+    struct xdr_ops {
+      uptr fns[10];
+    } *x_ops;
+    uptr x_public;
+    uptr x_private;
+    uptr x_base;
+    unsigned x_handy;
+  };
+
+  const int __sanitizer_XDR_ENCODE = 0;
+  const int __sanitizer_XDR_DECODE = 1;
+  const int __sanitizer_XDR_FREE = 2;
+#endif
+
   struct __sanitizer_passwd {
     char *pw_name;
     char *pw_passwd;
     int pw_uid;
     int pw_gid;
-#if SANITIZER_MAC
+#if SANITIZER_MAC || SANITIZER_FREEBSD
     long pw_change;
     char *pw_class;
 #endif
@@ -288,8 +305,11 @@ namespace __sanitizer {
 #endif
     char *pw_dir;
     char *pw_shell;
-#if SANITIZER_MAC
+#if SANITIZER_MAC || SANITIZER_FREEBSD
     long pw_expire;
+#endif
+#if SANITIZER_FREEBSD
+    int pw_fields;
 #endif
   };
 
@@ -610,6 +630,26 @@ namespace __sanitizer {
 #endif
   };
 
+#if SANITIZER_LINUX && !SANITIZER_ANDROID
+  struct __sanitizer_FILE {
+    int _flags;
+    char *_IO_read_ptr;
+    char *_IO_read_end;
+    char *_IO_read_base;
+    char *_IO_write_base;
+    char *_IO_write_ptr;
+    char *_IO_write_end;
+    char *_IO_buf_base;
+    char *_IO_buf_end;
+    char *_IO_save_base;
+    char *_IO_backup_base;
+    char *_IO_save_end;
+    void *_markers;
+    __sanitizer_FILE *_chain;
+    int _fileno;
+  };
+#endif
+
 #if SANITIZER_LINUX && !SANITIZER_ANDROID && \
     (defined(__i386) || defined(__x86_64))
   extern unsigned struct_user_regs_struct_sz;
@@ -652,6 +692,21 @@ namespace __sanitizer {
   } __attribute__((packed));
 #else
   };
+#endif
+
+#if SANITIZER_LINUX && !SANITIZER_ANDROID
+struct __sanitizer__obstack_chunk {
+  char *limit;
+  struct __sanitizer__obstack_chunk *prev;
+};
+
+struct __sanitizer_obstack {
+  long chunk_size;
+  struct __sanitizer__obstack_chunk *chunk;
+  char *object_base;
+  char *next_free;
+  uptr more_fields[7];
+};
 #endif
 
 #define IOC_NRBITS 8

@@ -38,6 +38,24 @@ SANITIZER_INTERFACE_ATTRIBUTE __attribute__((noreturn))
 void __msan_warning_noreturn();
 
 SANITIZER_INTERFACE_ATTRIBUTE
+void __msan_maybe_warning_1(u8 s, u32 o);
+SANITIZER_INTERFACE_ATTRIBUTE
+void __msan_maybe_warning_2(u16 s, u32 o);
+SANITIZER_INTERFACE_ATTRIBUTE
+void __msan_maybe_warning_4(u32 s, u32 o);
+SANITIZER_INTERFACE_ATTRIBUTE
+void __msan_maybe_warning_8(u64 s, u32 o);
+
+SANITIZER_INTERFACE_ATTRIBUTE
+void __msan_maybe_store_origin_1(u8 s, void *p, u32 o);
+SANITIZER_INTERFACE_ATTRIBUTE
+void __msan_maybe_store_origin_2(u16 s, void *p, u32 o);
+SANITIZER_INTERFACE_ATTRIBUTE
+void __msan_maybe_store_origin_4(u32 s, void *p, u32 o);
+SANITIZER_INTERFACE_ATTRIBUTE
+void __msan_maybe_store_origin_8(u64 s, void *p, u32 o);
+
+SANITIZER_INTERFACE_ATTRIBUTE
 void __msan_unpoison(const void *a, uptr size);
 SANITIZER_INTERFACE_ATTRIBUTE
 void __msan_unpoison_string(const char *s);
@@ -63,6 +81,9 @@ void __msan_load_unpoisoned(void *src, uptr size, void *dst);
 // or -1 if the whole range is good.
 SANITIZER_INTERFACE_ATTRIBUTE
 sptr __msan_test_shadow(const void *x, uptr size);
+
+SANITIZER_INTERFACE_ATTRIBUTE
+void __msan_check_mem_is_initialized(const void *x, uptr size);
 
 SANITIZER_INTERFACE_ATTRIBUTE
 void __msan_set_origin(const void *a, uptr size, u32 origin);
@@ -97,7 +118,7 @@ void __msan_set_expect_umr(int expect_umr);
 SANITIZER_INTERFACE_ATTRIBUTE
 void __msan_print_shadow(const void *x, uptr size);
 SANITIZER_INTERFACE_ATTRIBUTE
-void __msan_print_param_shadow();
+void __msan_dump_shadow(const void *x, uptr size);
 SANITIZER_INTERFACE_ATTRIBUTE
 int  __msan_has_dynamic_component();
 

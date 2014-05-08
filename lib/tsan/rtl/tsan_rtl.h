@@ -467,6 +467,7 @@ struct ThreadState {
   int nomalloc;
 
   explicit ThreadState(Context *ctx, int tid, int unique_id, u64 epoch,
+                       unsigned reuse_count,
                        uptr stk_addr, uptr stk_size,
                        uptr tls_addr, uptr tls_size);
 };
@@ -534,6 +535,9 @@ struct Context {
   int nreported;
   int nmissed_expected;
   atomic_uint64_t last_symbolize_time_ns;
+
+  void *background_thread;
+  atomic_uint32_t stop_background_thread;
 
   ThreadRegistry *thread_registry;
 
@@ -625,7 +629,7 @@ void ForkChildAfter(ThreadState *thr, uptr pc);
 void ReportRace(ThreadState *thr);
 bool OutputReport(Context *ctx,
                   const ScopedReport &srep,
-                  const ReportStack *suppress_stack1 = 0,
+                  const ReportStack *suppress_stack1,
                   const ReportStack *suppress_stack2 = 0,
                   const ReportLocation *suppress_loc = 0);
 bool IsFiredSuppression(Context *ctx,

@@ -75,7 +75,7 @@ Context::Context()
   , nreported()
   , nmissed_expected()
   , thread_registry(new(thread_registry_placeholder) ThreadRegistry(
-      CreateThreadContext, kMaxTid, kThreadQuarantineSize))
+      CreateThreadContext, kMaxTid, kThreadQuarantineSize, kMaxTidReuse))
   , racy_stacks(MBlockRacyStacks)
   , racy_addresses(MBlockRacyAddresses)
   , fired_suppressions(8) {
@@ -83,6 +83,7 @@ Context::Context()
 
 // The objects are allocated in TLS, so one may rely on zero-initialization.
 ThreadState::ThreadState(Context *ctx, int tid, int unique_id, u64 epoch,
+                         unsigned reuse_count,
                          uptr stk_addr, uptr stk_size,
                          uptr tls_addr, uptr tls_size)
   : fast_state(tid, epoch)
@@ -90,7 +91,7 @@ ThreadState::ThreadState(Context *ctx, int tid, int unique_id, u64 epoch,
   // they may be accessed before the ctor.
   // , ignore_reads_and_writes()
   // , ignore_interceptors()
-  , clock(tid)
+  , clock(tid, reuse_count)
 #ifndef TSAN_GO
   , jmp_bufs(MBlockJmpBuf)
 #endif
@@ -119,8 +120,13 @@ static void MemoryProfiler(Context *ctx, fd_t fd, int i) {
 }
 
 static void BackgroundThread(void *arg) {
+#ifndef TSAN_GO
   // This is a non-initialized non-user thread, nothing to see here.
-  ScopedIgnoreInterceptors ignore;
+  // We don't use ScopedIgnoreInterceptors, because we want ignores to be
+  // enabled even when the thread function exits (e.g. during pthread thread
+  // shutdown code).
+  cur_thread()->ignore_interceptors++;
+#endif
   const u64 kMs2Ns = 1000 * 1000;
 
   fd_t mprof_fd = kInvalidFd;
@@ -139,8 +145,10 @@ static void BackgroundThread(void *arg) {
 
   u64 last_flush = NanoTime();
   uptr last_rss = 0;
-  for (int i = 0; ; i++) {
-    SleepForSeconds(1);
+  for (int i = 0;
+      atomic_load(&ctx->stop_background_thread, memory_order_relaxed) == 0;
+      i++) {
+    SleepForMillis(100);
     u64 now = NanoTime();
 
     // Flush memory if requested.
@@ -189,6 +197,16 @@ static void BackgroundThread(void *arg) {
     }
 #endif
   }
+}
+
+static void StartBackgroundThread() {
+  ctx->background_thread = internal_start_thread(&BackgroundThread, 0);
+}
+
+static void StopBackgroundThread() {
+  atomic_store(&ctx->stop_background_thread, 1, memory_order_relaxed);
+  internal_join_thread(ctx->background_thread);
+  ctx->background_thread = 0;
 }
 
 void DontNeedShadowFor(uptr addr, uptr size) {
@@ -249,7 +267,8 @@ void Initialize(ThreadState *thr) {
   Symbolizer::Init(common_flags()->external_symbolizer_path);
   Symbolizer::Get()->AddHooks(EnterSymbolizer, ExitSymbolizer);
 #endif
-  internal_start_thread(&BackgroundThread, 0);
+  StartBackgroundThread();
+  SetSandboxingCallback(StopBackgroundThread);
   if (flags()->detect_deadlocks)
     ctx->dd = DDetector::Create(flags());
 
@@ -734,7 +753,8 @@ void ThreadIgnoreBegin(ThreadState *thr, uptr pc) {
   CHECK_GT(thr->ignore_reads_and_writes, 0);
   thr->fast_state.SetIgnoreBit();
 #ifndef TSAN_GO
-  thr->mop_ignore_set.Add(CurrentStackId(thr, pc));
+  if (!ctx->after_multithreaded_fork)
+    thr->mop_ignore_set.Add(CurrentStackId(thr, pc));
 #endif
 }
 
@@ -755,7 +775,8 @@ void ThreadIgnoreSyncBegin(ThreadState *thr, uptr pc) {
   thr->ignore_sync++;
   CHECK_GT(thr->ignore_sync, 0);
 #ifndef TSAN_GO
-  thr->sync_ignore_set.Add(CurrentStackId(thr, pc));
+  if (!ctx->after_multithreaded_fork)
+    thr->sync_ignore_set.Add(CurrentStackId(thr, pc));
 #endif
 }
 
@@ -765,7 +786,7 @@ void ThreadIgnoreSyncEnd(ThreadState *thr, uptr pc) {
   CHECK_GE(thr->ignore_sync, 0);
 #ifndef TSAN_GO
   if (thr->ignore_sync == 0)
-    thr->mop_ignore_set.Reset();
+    thr->sync_ignore_set.Reset();
 #endif
 }
 

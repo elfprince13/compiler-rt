@@ -141,7 +141,7 @@ static void PrintLegend(InternalScopedString *str) {
                   kAsanInitializationOrderMagic);
   PrintShadowByte(str, "  Poisoned by user:        ",
                   kAsanUserPoisonedMemoryMagic);
-  PrintShadowByte(str, "  Contiguous container OOB:",
+  PrintShadowByte(str, "  Container overflow:      ",
                   kAsanContiguousContainerOOBMagic);
   PrintShadowByte(str, "  ASan internal:           ", kAsanInternalHeapMagic);
 }
@@ -701,6 +701,19 @@ void ReportStringFunctionMemoryRangesOverlap(
   ReportErrorSummary(bug_type, stack);
 }
 
+void ReportStringFunctionSizeOverflow(uptr offset, uptr size,
+                                      StackTrace *stack) {
+  ScopedInErrorReport in_report;
+  Decorator d;
+  const char *bug_type = "negative-size-param";
+  Printf("%s", d.Warning());
+  Report("ERROR: AddressSanitizer: %s: (size=%zd)\n", bug_type, size);
+  Printf("%s", d.EndWarning());
+  stack->Print();
+  DescribeAddress(offset, size);
+  ReportErrorSummary(bug_type, stack);
+}
+
 void ReportBadParamsToAnnotateContiguousContainer(uptr beg, uptr end,
                                                   uptr old_mid, uptr new_mid,
                                                   StackTrace *stack) {
@@ -714,6 +727,19 @@ void ReportBadParamsToAnnotateContiguousContainer(uptr beg, uptr end,
          beg, end, old_mid, new_mid);
   stack->Print();
   ReportErrorSummary("bad-__sanitizer_annotate_contiguous_container", stack);
+}
+
+void ReportODRViolation(const __asan_global *g1, const __asan_global *g2) {
+  ScopedInErrorReport in_report;
+  Decorator d;
+  Printf("%s", d.Warning());
+  Report("ERROR: AddressSanitizer: odr-violation (%p):\n", g1->beg);
+  Printf("%s", d.EndWarning());
+  Printf("  [1] size=%zd %s %s\n", g1->size, g1->name, g1->module_name);
+  Printf("  [2] size=%zd %s %s\n", g2->size, g2->name, g2->module_name);
+  Report("HINT: if you don't care about these warnings you may set "
+         "ASAN_OPTIONS=detect_odr_violation=0\n");
+  ReportErrorSummary("odr-violation", g1->module_name, 0, g1->name);
 }
 
 // ----------------------- CheckForInvalidPointerPair ----------- {{{1
@@ -784,8 +810,8 @@ void ReportMacCfReallocUnknown(
 // --------------------------- Interface --------------------- {{{1
 using namespace __asan;  // NOLINT
 
-void __asan_report_error(uptr pc, uptr bp, uptr sp,
-                         uptr addr, bool is_write, uptr access_size) {
+void __asan_report_error(uptr pc, uptr bp, uptr sp, uptr addr, int is_write,
+                         uptr access_size) {
   ScopedInErrorReport in_report;
 
   // Determine the error type.

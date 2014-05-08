@@ -83,11 +83,16 @@ void GetStackTrace(StackTrace *stack, uptr max_s, uptr pc, uptr bp,
 void ReportUMR(StackTrace *stack, u32 origin);
 void ReportExpectedUMRNotFound(StackTrace *stack);
 void ReportAtExitStatistics();
+void DescribeMemoryRange(const void *x, uptr size);
+void ReportUMRInsideAddressRange(const char *what, const void *start, uptr size,
+                                 uptr offset);
 
 // Unpoison first n function arguments.
 void UnpoisonParam(uptr n);
 void UnpoisonThreadLocalState();
 
+u32 GetOriginIfPoisoned(uptr a, uptr size);
+void SetOriginIfPoisoned(uptr addr, uptr src_shadow, uptr size, u32 src_origin);
 void CopyOrigin(void *dst, const void *src, uptr size, StackTrace *stack);
 void MovePoison(void *dst, const void *src, uptr size, StackTrace *stack);
 void CopyPoison(void *dst, const void *src, uptr size, StackTrace *stack);
@@ -104,13 +109,15 @@ u32 ChainOrigin(u32 id, StackTrace *stack);
         StackTrace::GetCurrentPc(), GET_CURRENT_FRAME(),           \
         common_flags()->fast_unwind_on_malloc)
 
-#define GET_STORE_STACK_TRACE                                      \
-  StackTrace stack;                                                \
-  stack.size = 0;                                                  \
-  if (__msan_get_track_origins() > 1 && msan_inited)               \
-    GetStackTrace(&stack, common_flags()->malloc_context_size,     \
-        StackTrace::GetCurrentPc(), GET_CURRENT_FRAME(),           \
-        common_flags()->fast_unwind_on_malloc)
+#define GET_STORE_STACK_TRACE_PC_BP(pc, bp)                            \
+  StackTrace stack;                                                    \
+  stack.size = 0;                                                      \
+  if (__msan_get_track_origins() > 1 && msan_inited)                   \
+    GetStackTrace(&stack, common_flags()->malloc_context_size, pc, bp, \
+                  common_flags()->fast_unwind_on_malloc)
+
+#define GET_STORE_STACK_TRACE \
+  GET_STORE_STACK_TRACE_PC_BP(StackTrace::GetCurrentPc(), GET_CURRENT_FRAME())
 
 class ScopedThreadLocalStateBackup {
  public:
@@ -124,18 +131,16 @@ class ScopedThreadLocalStateBackup {
 
 extern void (*death_callback)(void);
 
+void MsanTSDInit(void (*destructor)(void *tsd));
+void *MsanTSDGet();
+void MsanTSDSet(void *tsd);
+void MsanTSDDtor(void *tsd);
+
 }  // namespace __msan
 
 #define MSAN_MALLOC_HOOK(ptr, size) \
   if (&__msan_malloc_hook) __msan_malloc_hook(ptr, size)
 #define MSAN_FREE_HOOK(ptr) \
   if (&__msan_free_hook) __msan_free_hook(ptr)
-
-struct MsanStackBounds {
-  uptr stack_addr, stack_size;
-  uptr tls_addr, tls_size;
-};
-
-extern THREADLOCAL MsanStackBounds msan_stack_bounds;
 
 #endif  // MSAN_H
