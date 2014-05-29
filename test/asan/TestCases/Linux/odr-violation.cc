@@ -1,3 +1,6 @@
+// FIXME: https://code.google.com/p/address-sanitizer/issues/detail?id=316
+// XFAIL: android
+//
 // Different size: detect a bug if detect_odr_violation>=1
 // RUN: %clangxx_asan -DBUILD_SO=1 -fPIC -shared %s -o %t.so
 // RUN: %clangxx_asan %s %t.so -Wl,-R. -o %t
@@ -10,6 +13,9 @@
 // RUN: %clangxx_asan -DBUILD_SO=1 -fPIC -shared %s -o %t.so -DSZ=100
 // RUN: ASAN_OPTIONS=detect_odr_violation=1     %run %t 2>&1 | FileCheck %s --check-prefix=DISABLED
 // RUN: ASAN_OPTIONS=detect_odr_violation=2 not %run %t 2>&1 | FileCheck %s
+
+// GNU driver doesn't handle .so files properly.
+// REQUIRES: Clang
 
 #ifndef SZ
 # define SZ 4

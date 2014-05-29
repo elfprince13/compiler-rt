@@ -289,7 +289,8 @@ namespace __sanitizer {
   int ptrace_setfpregs = PTRACE_SETFPREGS;
   int ptrace_getfpxregs = PTRACE_GETFPXREGS;
   int ptrace_setfpxregs = PTRACE_SETFPXREGS;
-#if defined(PTRACE_GETSIGINFO) && defined(PTRACE_SETSIGINFO)
+#if (defined(PTRACE_GETSIGINFO) && defined(PTRACE_SETSIGINFO)) ||              \
+    (defined(PT_GETSIGINFO) && defined(PT_SETSIGINFO))
   int ptrace_getsiginfo = PTRACE_GETSIGINFO;
   int ptrace_setsiginfo = PTRACE_SETSIGINFO;
 #else
@@ -1126,7 +1127,6 @@ CHECK_SIZE_AND_OFFSET(XDR, x_public);
 CHECK_SIZE_AND_OFFSET(XDR, x_private);
 CHECK_SIZE_AND_OFFSET(XDR, x_base);
 CHECK_SIZE_AND_OFFSET(XDR, x_handy);
-CHECK_TYPE_SIZE(XDR::xdr_ops);
 COMPILER_CHECK(__sanitizer_XDR_ENCODE == XDR_ENCODE);
 COMPILER_CHECK(__sanitizer_XDR_DECODE == XDR_DECODE);
 COMPILER_CHECK(__sanitizer_XDR_FREE == XDR_FREE);

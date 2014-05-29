@@ -57,8 +57,13 @@ if (NOT COMPILER_RT_STANDALONE_BUILD)
          ${LLVM_INCLUDE_TESTS})
  option(COMPILER_RT_ENABLE_WERROR "Fail and stop if warning is triggered"
         ${LLVM_ENABLE_WERROR})
-  # Use just-built Clang to compile/link tests.
-  set(COMPILER_RT_TEST_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang)
+  # Use just-built Clang to compile/link tests on all platforms, except for
+  # Windows where we need to use clang-cl instead.
+  if(NOT MSVC)
+    set(COMPILER_RT_TEST_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang)
+  else()
+    set(COMPILER_RT_TEST_COMPILER ${LLVM_RUNTIME_OUTPUT_INTDIR}/clang.exe)
+  endif()
 else()
   # Take output dir and install path from the user.
   set(COMPILER_RT_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR} CACHE PATH
@@ -120,9 +125,17 @@ endif()
 
 if("${COMPILER_RT_TEST_COMPILER}" MATCHES "clang[+]*$")
   set(COMPILER_RT_TEST_COMPILER_ID Clang)
+elseif("${COMPILER_RT_TEST_COMPILER}" MATCHES "clang.*.exe$")
+  set(COMPILER_RT_TEST_COMPILER_ID Clang)
 else()
   set(COMPILER_RT_TEST_COMPILER_ID GNU)
 endif()
+
+# Tests using XFAIL use the first value in COMPILER_RT_TEST_TARGET_TRIPLE
+set(COMPILER_RT_TEST_TARGET_TRIPLE ${TARGET_TRIPLE} CACHE STRING
+    "Default triple for cross-compiled executables")
+string(REPLACE "-" ";" TARGET_TRIPLE_LIST ${COMPILER_RT_TEST_TARGET_TRIPLE})
+list(GET TARGET_TRIPLE_LIST 0 COMPILER_RT_TEST_TARGET_ARCH)
 
 string(TOLOWER ${CMAKE_SYSTEM_NAME} COMPILER_RT_OS_DIR)
 set(COMPILER_RT_LIBRARY_OUTPUT_DIR
@@ -202,15 +215,16 @@ else()
     test_target_arch(i386 ${TARGET_32_BIT_CFLAGS})
   elseif("${LLVM_NATIVE_ARCH}" STREQUAL "PowerPC")
     test_target_arch(powerpc64 ${TARGET_64_BIT_CFLAGS})
-  elseif("${LLVM_NATIVE_ARCH}" STREQUAL "ARM")
-    test_target_arch(arm "")
   endif()
+  test_target_arch(arm "-march=armv7-a")
+  test_target_arch(aarch64 "-march=armv8-a")
 endif()
 
-# We only support running instrumented tests when we're not cross compiling
-# and target a unix-like system. We can run tests on Android even when we are
-# cross-compiling.
-if(("${CMAKE_HOST_SYSTEM}" STREQUAL "${CMAKE_SYSTEM}" AND UNIX) OR ANDROID)
+# We support running instrumented tests when we're not cross compiling
+# and target a UNIX-like system or Windows.
+# We can run tests on Android even when we are cross-compiling.
+if(("${CMAKE_HOST_SYSTEM}" STREQUAL "${CMAKE_SYSTEM}" AND (UNIX OR MSVC)) OR ANDROID
+   OR COMPILER_RT_EMULATOR)
   option(COMPILER_RT_CAN_EXECUTE_TESTS "Can we execute instrumented tests" ON)
 else()
   option(COMPILER_RT_CAN_EXECUTE_TESTS "Can we execute instrumented tests" OFF)
@@ -333,14 +347,14 @@ endif()
 # Architectures supported by Sanitizer runtimes. Specific sanitizers may
 # support only subset of these (e.g. TSan works on x86_64 only).
 filter_available_targets(SANITIZER_COMMON_SUPPORTED_ARCH
-  x86_64 i386 powerpc64 arm)
-filter_available_targets(ASAN_SUPPORTED_ARCH x86_64 i386 powerpc64)
+  x86_64 i386 powerpc64 arm aarch64)
+filter_available_targets(ASAN_SUPPORTED_ARCH x86_64 i386 powerpc64 arm)
 filter_available_targets(DFSAN_SUPPORTED_ARCH x86_64)
 filter_available_targets(LSAN_SUPPORTED_ARCH x86_64)
 filter_available_targets(MSAN_SUPPORTED_ARCH x86_64)
-filter_available_targets(PROFILE_SUPPORTED_ARCH x86_64 i386 arm)
+filter_available_targets(PROFILE_SUPPORTED_ARCH x86_64 i386 arm aarch64)
 filter_available_targets(TSAN_SUPPORTED_ARCH x86_64)
-filter_available_targets(UBSAN_SUPPORTED_ARCH x86_64 i386)
+filter_available_targets(UBSAN_SUPPORTED_ARCH x86_64 i386 arm aarch64)
 
 add_subdirectory(include)
 
