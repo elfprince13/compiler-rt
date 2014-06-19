@@ -21,6 +21,7 @@ set(ASAN_UNITTEST_HEADERS
   asan_test_utils.h)
 
 set(ASAN_UNITTEST_COMMON_CFLAGS
+  ${COMPILER_RT_TEST_CFLAGS}
   ${COMPILER_RT_GTEST_CFLAGS}
   -I${COMPILER_RT_SOURCE_DIR}/include
   -I${COMPILER_RT_SOURCE_DIR}/lib
@@ -37,21 +38,6 @@ if(COMPILER_RT_TEST_COMPILER_ID MATCHES "Clang")
   list(APPEND ASAN_UNITTEST_COMMON_CFLAGS -gline-tables-only)
 else()
   list(APPEND ASAN_UNITTEST_COMMON_CFLAGS -g)
-endif()
-
-if(MSVC)
-  # MSVC system headers and gtest use a lot of deprecated stuff.
-  list(APPEND ASAN_UNITTEST_COMMON_CFLAGS
-       -Wno-deprecated-declarations)
-
-  # clang doesn't support exceptions on Windows yet.
-  list(APPEND ASAN_UNITTEST_COMMON_CFLAGS
-       -D_HAS_EXCEPTIONS=0)
-
-  # We should teach clang to understand more pragmas.
-  list(APPEND ASAN_UNITTEST_COMMON_CFLAGS
-       -Wno-unknown-pragmas
-       -Wno-undefined-inline)
 endif()
 
 # Use -D instead of definitions to please custom compile command.
@@ -100,8 +86,8 @@ set(ASAN_DYNAMIC_UNITTEST_INSTRUMENTED_LINKFLAGS
 set(ASAN_UNITTEST_NOINST_LINKFLAGS ${ASAN_UNITTEST_COMMON_LINKFLAGS})
 append_if(COMPILER_RT_HAS_LIBM -lm ASAN_UNITTEST_NOINST_LINKFLAGS)
 append_if(COMPILER_RT_HAS_LIBDL -ldl ASAN_UNITTEST_NOINST_LINKFLAGS)
-append_if(COMPILER_RT_HAS_LIBPTHREAD -lpthread ASAN_UNITTEST_NOINST_LINKFLAGS)
-append_if(COMPILER_RT_HAS_LIBPTHREAD -lpthread
+append_if(COMPILER_RT_HAS_LIBPTHREAD -pthread ASAN_UNITTEST_NOINST_LINKFLAGS)
+append_if(COMPILER_RT_HAS_LIBPTHREAD -pthread
           ASAN_DYNAMIC_UNITTEST_INSTRUMENTED_LINKFLAGS)
 
 # Compile source for the given architecture, using compiler

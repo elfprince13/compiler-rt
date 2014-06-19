@@ -35,7 +35,6 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <sys/timeb.h>
 #include <sys/times.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
@@ -45,6 +44,7 @@
 
 #if !SANITIZER_ANDROID
 #include <sys/mount.h>
+#include <sys/timeb.h>
 #endif
 
 #if SANITIZER_LINUX
@@ -289,6 +289,7 @@ namespace __sanitizer {
   int ptrace_setfpregs = PTRACE_SETFPREGS;
   int ptrace_getfpxregs = PTRACE_GETFPXREGS;
   int ptrace_setfpxregs = PTRACE_SETFPXREGS;
+  int ptrace_geteventmsg = PTRACE_GETEVENTMSG;
 #if (defined(PTRACE_GETSIGINFO) && defined(PTRACE_SETSIGINFO)) ||              \
     (defined(PT_GETSIGINFO) && defined(PT_SETSIGINFO))
   int ptrace_getsiginfo = PTRACE_GETSIGINFO;
@@ -1058,6 +1059,10 @@ CHECK_SIZE_AND_OFFSET(shmid_ds, shm_nattch);
 
 CHECK_TYPE_SIZE(clock_t);
 
+#if SANITIZER_LINUX
+CHECK_TYPE_SIZE(clockid_t);
+#endif
+
 #if !SANITIZER_ANDROID
 CHECK_TYPE_SIZE(ifaddrs);
 CHECK_SIZE_AND_OFFSET(ifaddrs, ifa_next);
@@ -1088,11 +1093,13 @@ CHECK_SIZE_AND_OFFSET(ifaddrs, ifa_data);
 COMPILER_CHECK(sizeof(__sanitizer_mallinfo) == sizeof(struct mallinfo));
 #endif
 
+#if !SANITIZER_ANDROID
 CHECK_TYPE_SIZE(timeb);
 CHECK_SIZE_AND_OFFSET(timeb, time);
 CHECK_SIZE_AND_OFFSET(timeb, millitm);
 CHECK_SIZE_AND_OFFSET(timeb, timezone);
 CHECK_SIZE_AND_OFFSET(timeb, dstflag);
+#endif
 
 CHECK_TYPE_SIZE(passwd);
 CHECK_SIZE_AND_OFFSET(passwd, pw_name);

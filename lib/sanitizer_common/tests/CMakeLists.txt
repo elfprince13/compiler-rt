@@ -34,6 +34,7 @@ foreach(header ${SANITIZER_HEADERS})
 endforeach()
 
 set(SANITIZER_TEST_CFLAGS_COMMON
+  ${COMPILER_RT_TEST_CFLAGS}
   ${COMPILER_RT_GTEST_CFLAGS}
   -I${COMPILER_RT_SOURCE_DIR}/include
   -I${COMPILER_RT_SOURCE_DIR}/lib
@@ -50,27 +51,12 @@ else()
   list(APPEND ASAN_UNITTEST_COMMON_CFLAGS -g)
 endif()
 
-if(MSVC)
-  # MSVC system headers and gtest use a lot of deprecated stuff.
-  list(APPEND SANITIZER_TEST_CFLAGS_COMMON
-       -Wno-deprecated-declarations)
-
-  # clang doesn't support exceptions on Windows yet.
-  list(APPEND SANITIZER_TEST_CFLAGS_COMMON
-       -D_HAS_EXCEPTIONS=0)
-
-  # We should teach clang to understand more pragmas.
-  list(APPEND SANITIZER_TEST_CFLAGS_COMMON
-       -Wno-unknown-pragmas
-       -Wno-undefined-inline)
-endif()
-
 if(NOT MSVC)
   list(APPEND SANITIZER_TEST_LINK_FLAGS_COMMON --driver-mode=g++)
 endif()
 
 append_if(COMPILER_RT_HAS_LIBDL -ldl SANITIZER_TEST_LINK_FLAGS_COMMON)
-append_if(COMPILER_RT_HAS_LIBPTHREAD -lpthread SANITIZER_TEST_LINK_FLAGS_COMMON)
+append_if(COMPILER_RT_HAS_LIBPTHREAD -pthread SANITIZER_TEST_LINK_FLAGS_COMMON)
 # x86_64 FreeBSD 9.2 additionally requires libc++ to build the tests. Also,
 # 'libm' shall be specified explicitly to build i386 tests.
 if(CMAKE_SYSTEM MATCHES "FreeBSD-9.2-RELEASE")

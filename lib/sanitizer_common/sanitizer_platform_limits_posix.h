@@ -440,6 +440,10 @@ namespace __sanitizer {
   typedef long __sanitizer_clock_t;
 #endif
 
+#if SANITIZER_LINUX
+  typedef int __sanitizer_clockid_t;
+#endif
+
 #if SANITIZER_LINUX || SANITIZER_FREEBSD
 #if defined(_LP64) || defined(__x86_64__) || defined(__powerpc__)
   typedef unsigned __sanitizer___kernel_uid_t;
@@ -678,6 +682,7 @@ namespace __sanitizer {
   extern int ptrace_setsiginfo;
   extern int ptrace_getregset;
   extern int ptrace_setregset;
+  extern int ptrace_geteventmsg;
 #endif
 
 #if (SANITIZER_LINUX || SANITIZER_FREEBSD) && !SANITIZER_ANDROID
