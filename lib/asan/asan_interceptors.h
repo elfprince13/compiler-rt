@@ -68,7 +68,9 @@
 # define ASAN_INTERCEPT_SIGLONGJMP 0
 #endif
 
-#if ASAN_HAS_EXCEPTIONS && !SANITIZER_WINDOWS
+// Android bug: https://code.google.com/p/android/issues/detail?id=61799
+#if ASAN_HAS_EXCEPTIONS && !SANITIZER_WINDOWS && \
+    !(SANITIZER_ANDROID && defined(__i386))
 # define ASAN_INTERCEPT___CXA_THROW 1
 #else
 # define ASAN_INTERCEPT___CXA_THROW 0
@@ -84,7 +86,7 @@ DECLARE_REAL(int, memcmp, const void *a1, const void *a2, uptr size)
 DECLARE_REAL(void*, memcpy, void *to, const void *from, uptr size)
 DECLARE_REAL(void*, memset, void *block, int c, uptr size)
 DECLARE_REAL(char*, strchr, const char *str, int c)
-DECLARE_REAL(uptr, strlen, const char *s)
+DECLARE_REAL(unsigned, strlen, const char *s)
 DECLARE_REAL(char*, strncpy, char *to, const char *from, uptr size)
 DECLARE_REAL(uptr, strnlen, const char *s, uptr maxlen)
 DECLARE_REAL(char*, strstr, const char *s1, const char *s2)

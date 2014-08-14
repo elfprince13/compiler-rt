@@ -53,11 +53,7 @@
 namespace __tsan {
 
 #ifndef TSAN_GO
-#if defined(TSAN_COMPAT_SHADOW) && TSAN_COMPAT_SHADOW
 const uptr kAllocatorSpace = 0x7d0000000000ULL;
-#else
-const uptr kAllocatorSpace = 0x7d0000000000ULL;
-#endif
 const uptr kAllocatorSize  =  0x10000000000ULL;  // 1T.
 
 struct MapUnmapCallback;
@@ -378,6 +374,7 @@ struct ThreadState {
 
   DenseSlabAllocCache block_cache;
   DenseSlabAllocCache sync_cache;
+  DenseSlabAllocCache clock_cache;
 
 #ifndef TSAN_GO
   u32 last_sleep_stack_id;
@@ -422,6 +419,7 @@ class ThreadContext : public ThreadContextBase {
   void OnStarted(void *arg);
   void OnCreated(void *arg);
   void OnReset();
+  void OnDetached(void *arg);
 };
 
 struct RacyStacks {
@@ -469,6 +467,8 @@ struct Context {
   // Number of fired suppressions may be large enough.
   InternalMmapVector<FiredSuppression> fired_suppressions;
   DDetector *dd;
+
+  ClockAlloc clock_alloc;
 
   Flags flags;
 

@@ -29,6 +29,11 @@ struct FlagDescription {
 
 IntrusiveList<FlagDescription> flag_descriptions;
 
+// If set, the tool will install its own SEGV signal handler by default.
+#ifndef SANITIZER_NEEDS_SEGV
+# define SANITIZER_NEEDS_SEGV 1
+#endif
+
 void SetCommonFlagsDefaults(CommonFlags *f) {
   f->symbolize = true;
   f->external_symbolizer_path = 0;
@@ -58,6 +63,9 @@ void SetCommonFlagsDefaults(CommonFlags *f) {
   f->coverage_direct = SANITIZER_ANDROID;
   f->coverage_dir = ".";
   f->full_address_space = false;
+  f->suppressions = "";
+  f->print_suppressions = true;
+  f->disable_coredump = (SANITIZER_WORDSIZE == 64);
 }
 
 void ParseCommonFlagsFromString(CommonFlags *f, const char *str) {
@@ -139,6 +147,13 @@ void ParseCommonFlagsFromString(CommonFlags *f, const char *str) {
   ParseFlag(str, &f->full_address_space, "full_address_space",
             "Sanitize complete address space; "
             "by default kernel area on 32-bit platforms will not be sanitized");
+  ParseFlag(str, &f->suppressions, "suppressions", "Suppressions file name.");
+  ParseFlag(str, &f->print_suppressions, "print_suppressions",
+            "Print matched suppressions at exit.");
+  ParseFlag(str, &f->disable_coredump, "disable_coredump",
+      "Disable core dumping. By default, disable_core=1 on 64-bit to avoid "
+      "dumping a 16T+ core file. Ignored on OSes that don't dump core by"
+      "default and for sanitizers that don't reserve lots of virtual memory.");
 
   // Do a sanity check for certain flags.
   if (f->malloc_context_size < 1)

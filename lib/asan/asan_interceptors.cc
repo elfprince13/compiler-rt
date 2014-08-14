@@ -148,6 +148,7 @@ DECLARE_REAL_AND_INTERCEPTOR(void, free, void *)
 #define COMMON_INTERCEPTOR_ON_EXIT(ctx) OnExit()
 #define COMMON_INTERCEPTOR_LIBRARY_LOADED(filename, res) CovUpdateMapping()
 #define COMMON_INTERCEPTOR_LIBRARY_UNLOADED() CovUpdateMapping()
+#define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (!asan_inited)
 #include "sanitizer_common/sanitizer_common_interceptors.inc"
 
 #define COMMON_SYSCALL_PRE_READ_RANGE(p, s) ASAN_READ_RANGE(p, s)
@@ -292,6 +293,26 @@ INTERCEPTOR(void, __cxa_throw, void *a, void *b, void *c) {
   CHECK(REAL(__cxa_throw));
   __asan_handle_no_return();
   REAL(__cxa_throw)(a, b, c);
+}
+#endif
+
+#if SANITIZER_WINDOWS
+INTERCEPTOR_WINAPI(void, RaiseException, void *a, void *b, void *c, void *d) {
+  CHECK(REAL(RaiseException));
+  __asan_handle_no_return();
+  REAL(RaiseException)(a, b, c, d);
+}
+
+INTERCEPTOR(int, _except_handler3, void *a, void *b, void *c, void *d) {
+  CHECK(REAL(_except_handler3));
+  __asan_handle_no_return();
+  return REAL(_except_handler3)(a, b, c, d);
+}
+
+INTERCEPTOR(int, _except_handler4, void *a, void *b, void *c, void *d) {
+  CHECK(REAL(_except_handler4));
+  __asan_handle_no_return();
+  return REAL(_except_handler4)(a, b, c, d);
 }
 #endif
 
@@ -529,7 +550,7 @@ INTERCEPTOR(char*, strdup, const char *s) {
 }
 #endif
 
-INTERCEPTOR(uptr, strlen, const char *s) {
+INTERCEPTOR(unsigned, strlen, const char *s) {
   if (UNLIKELY(!asan_inited)) return internal_strlen(s);
   // strlen is called from malloc_default_purgeable_zone()
   // in __asan::ReplaceSystemAlloc() on Mac.
@@ -537,15 +558,15 @@ INTERCEPTOR(uptr, strlen, const char *s) {
     return REAL(strlen)(s);
   }
   ENSURE_ASAN_INITED();
-  uptr length = REAL(strlen)(s);
+  unsigned length = REAL(strlen)(s);
   if (flags()->replace_str) {
     ASAN_READ_RANGE(s, length + 1);
   }
   return length;
 }
 
-INTERCEPTOR(uptr, wcslen, const wchar_t *s) {
-  uptr length = REAL(wcslen)(s);
+INTERCEPTOR(unsigned, wcslen, const wchar_t *s) {
+  unsigned length = REAL(wcslen)(s);
   if (!asan_init_is_running) {
     ENSURE_ASAN_INITED();
     ASAN_READ_RANGE(s, (length + 1) * sizeof(wchar_t));
@@ -728,6 +749,9 @@ INTERCEPTOR_WINAPI(DWORD, CreateThread,
 namespace __asan {
 void InitializeWindowsInterceptors() {
   ASAN_INTERCEPT_FUNC(CreateThread);
+  ASAN_INTERCEPT_FUNC(RaiseException);
+  ASAN_INTERCEPT_FUNC(_except_handler3);
+  ASAN_INTERCEPT_FUNC(_except_handler4);
 }
 
 }  // namespace __asan

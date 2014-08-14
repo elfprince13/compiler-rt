@@ -16,6 +16,8 @@ set(SANITIZER_SOURCES
   sanitizer_platform_limits_posix.cc
   sanitizer_posix.cc
   sanitizer_printf.cc
+  sanitizer_procmaps_common.cc
+  sanitizer_procmaps_freebsd.cc
   sanitizer_procmaps_linux.cc
   sanitizer_procmaps_mac.cc
   sanitizer_stackdepot.cc
@@ -45,6 +47,7 @@ set(SANITIZER_LIBCDEP_SOURCES
 set(SANITIZER_HEADERS
   sanitizer_addrhashmap.h
   sanitizer_allocator.h
+  sanitizer_allocator_interface.h
   sanitizer_allocator_internal.h
   sanitizer_atomic.h
   sanitizer_atomic_clang.h
@@ -99,7 +102,10 @@ endif()
 set(SANITIZER_CFLAGS ${SANITIZER_COMMON_CFLAGS})
 append_no_rtti_flag(SANITIZER_CFLAGS)
 
-append_if(COMPILER_RT_HAS_WFRAME_LARGER_THAN_FLAG -Wframe-larger-than=512 SANITIZER_CFLAGS)
+# Stack frames on PowerPC are much larger than anticipated.
+if(NOT ${LLVM_NATIVE_ARCH} STREQUAL "PowerPC")
+  append_if(COMPILER_RT_HAS_WFRAME_LARGER_THAN_FLAG -Wframe-larger-than=512 SANITIZER_CFLAGS)
+endif()
 append_if(COMPILER_RT_HAS_WGLOBAL_CONSTRUCTORS_FLAG -Wglobal-constructors SANITIZER_CFLAGS)
 
 add_custom_target(sanitizer_common)

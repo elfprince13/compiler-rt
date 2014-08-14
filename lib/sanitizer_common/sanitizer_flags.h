@@ -57,6 +57,9 @@ struct CommonFlags {
   bool coverage_direct;
   const char *coverage_dir;
   bool full_address_space;
+  const char *suppressions;
+  bool print_suppressions;
+  bool disable_coredump;
 };
 
 inline CommonFlags *common_flags() {

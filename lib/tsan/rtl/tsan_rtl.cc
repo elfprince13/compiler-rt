@@ -157,7 +157,6 @@ static void BackgroundThread(void *arg) {
   }
 
   u64 last_flush = NanoTime();
-  u64 last_rss_check = NanoTime();
   uptr last_rss = 0;
   for (int i = 0;
       atomic_load(&ctx->stop_background_thread, memory_order_relaxed) == 0;
@@ -175,8 +174,7 @@ static void BackgroundThread(void *arg) {
       }
     }
     // GetRSS can be expensive on huge programs, so don't do it every 100ms.
-    if (flags()->memory_limit_mb > 0 && last_rss_check + 1000 * kMs2Ns < now) {
-      last_rss_check = now;
+    if (flags()->memory_limit_mb > 0) {
       uptr rss = GetRSS();
       uptr limit = uptr(flags()->memory_limit_mb) << 20;
       if (flags()->verbosity > 0) {
@@ -308,8 +306,7 @@ void Initialize(ThreadState *thr) {
   InitializeSuppressions();
 #ifndef TSAN_GO
   InitializeLibIgnore();
-  Symbolizer::Init(common_flags()->external_symbolizer_path);
-  Symbolizer::Get()->AddHooks(EnterSymbolizer, ExitSymbolizer);
+  Symbolizer::GetOrInit()->AddHooks(EnterSymbolizer, ExitSymbolizer);
 #endif
   StartBackgroundThread();
 #ifndef TSAN_GO
@@ -608,13 +605,13 @@ void UnalignedMemoryAccess(ThreadState *thr, uptr pc, uptr addr,
   while (size) {
     int size1 = 1;
     int kAccessSizeLog = kSizeLog1;
-    if (size >= 8 && (addr & ~7) == ((addr + 8) & ~7)) {
+    if (size >= 8 && (addr & ~7) == ((addr + 7) & ~7)) {
       size1 = 8;
       kAccessSizeLog = kSizeLog8;
-    } else if (size >= 4 && (addr & ~7) == ((addr + 4) & ~7)) {
+    } else if (size >= 4 && (addr & ~7) == ((addr + 3) & ~7)) {
       size1 = 4;
       kAccessSizeLog = kSizeLog4;
-    } else if (size >= 2 && (addr & ~7) == ((addr + 2) & ~7)) {
+    } else if (size >= 2 && (addr & ~7) == ((addr + 1) & ~7)) {
       size1 = 2;
       kAccessSizeLog = kSizeLog2;
     }

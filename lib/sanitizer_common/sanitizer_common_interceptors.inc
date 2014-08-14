@@ -27,6 +27,7 @@
 //   COMMON_INTERCEPTOR_MUTEX_REPAIR
 //   COMMON_INTERCEPTOR_SET_PTHREAD_NAME
 //   COMMON_INTERCEPTOR_HANDLE_RECVMSG
+//   COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED
 //===----------------------------------------------------------------------===//
 #include "interception/interception.h"
 #include "sanitizer_addrhashmap.h"
@@ -87,6 +88,10 @@
 #ifndef COMMON_INTERCEPTOR_ENTER_NOIGNORE
 #define COMMON_INTERCEPTOR_ENTER_NOIGNORE(ctx, ...) \
   COMMON_INTERCEPTOR_ENTER(ctx, __VA_ARGS__)
+#endif
+
+#ifndef COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED
+#define COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED (0)
 #endif
 
 struct FileMetadata {
@@ -174,6 +179,8 @@ INTERCEPTOR(int, strcmp, const char *s1, const char *s2) {
 }
 
 INTERCEPTOR(int, strncmp, const char *s1, const char *s2, uptr size) {
+  if (COMMON_INTERCEPTOR_NOTHING_IS_INITIALIZED)
+    return internal_strncmp(s1, s2, size);
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, strncmp, s1, s2, size);
   unsigned char c1 = 0, c2 = 0;
@@ -1535,8 +1542,14 @@ INTERCEPTOR_WITH_SUFFIX(int, wait, int *status) {
     COMMON_INTERCEPTOR_WRITE_RANGE(ctx, status, sizeof(*status));
   return res;
 }
+// On FreeBSD id_t is always 64-bit wide.
+#if SANITIZER_FREEBSD && (SANITIZER_WORDSIZE == 32)
+INTERCEPTOR_WITH_SUFFIX(int, waitid, int idtype, long long id, void *infop,
+                        int options) {
+#else
 INTERCEPTOR_WITH_SUFFIX(int, waitid, int idtype, int id, void *infop,
                         int options) {
+#endif
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, waitid, idtype, id, infop, options);
   // FIXME: under ASan the call below may write to freed memory and corrupt
@@ -1834,6 +1847,30 @@ INTERCEPTOR(struct __sanitizer_hostent *, gethostbyname2, char *name, int af) {
 #endif
 
 #if SANITIZER_INTERCEPT_GETHOSTBYNAME_R
+INTERCEPTOR(int, gethostbyname_r, char *name, struct __sanitizer_hostent *ret,
+            char *buf, SIZE_T buflen, __sanitizer_hostent **result,
+            int *h_errnop) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, gethostbyname_r, name, ret, buf, buflen, result,
+                           h_errnop);
+  // FIXME: under ASan the call below may write to freed memory and corrupt
+  // its metadata. See
+  // https://code.google.com/p/address-sanitizer/issues/detail?id=321.
+  int res = REAL(gethostbyname_r)(name, ret, buf, buflen, result, h_errnop);
+  if (result) {
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, result, sizeof(*result));
+    if (res == 0 && *result) write_hostent(ctx, *result);
+  }
+  if (h_errnop)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, h_errnop, sizeof(*h_errnop));
+  return res;
+}
+#define INIT_GETHOSTBYNAME_R COMMON_INTERCEPT_FUNCTION(gethostbyname_r);
+#else
+#define INIT_GETHOSTBYNAME_R
+#endif
+
+#if SANITIZER_INTERCEPT_GETHOSTENT_R
 INTERCEPTOR(int, gethostent_r, struct __sanitizer_hostent *ret, char *buf,
             SIZE_T buflen, __sanitizer_hostent **result, int *h_errnop) {
   void *ctx;
@@ -1851,7 +1888,13 @@ INTERCEPTOR(int, gethostent_r, struct __sanitizer_hostent *ret, char *buf,
     COMMON_INTERCEPTOR_WRITE_RANGE(ctx, h_errnop, sizeof(*h_errnop));
   return res;
 }
+#define INIT_GETHOSTENT_R                  \
+  COMMON_INTERCEPT_FUNCTION(gethostent_r);
+#else
+#define INIT_GETHOSTENT_R
+#endif
 
+#if SANITIZER_INTERCEPT_GETHOSTBYADDR_R
 INTERCEPTOR(int, gethostbyaddr_r, void *addr, int len, int type,
             struct __sanitizer_hostent *ret, char *buf, SIZE_T buflen,
             __sanitizer_hostent **result, int *h_errnop) {
@@ -1872,26 +1915,13 @@ INTERCEPTOR(int, gethostbyaddr_r, void *addr, int len, int type,
     COMMON_INTERCEPTOR_WRITE_RANGE(ctx, h_errnop, sizeof(*h_errnop));
   return res;
 }
+#define INIT_GETHOSTBYADDR_R                  \
+  COMMON_INTERCEPT_FUNCTION(gethostbyaddr_r);
+#else
+#define INIT_GETHOSTBYADDR_R
+#endif
 
-INTERCEPTOR(int, gethostbyname_r, char *name, struct __sanitizer_hostent *ret,
-            char *buf, SIZE_T buflen, __sanitizer_hostent **result,
-            int *h_errnop) {
-  void *ctx;
-  COMMON_INTERCEPTOR_ENTER(ctx, gethostbyname_r, name, ret, buf, buflen, result,
-                           h_errnop);
-  // FIXME: under ASan the call below may write to freed memory and corrupt
-  // its metadata. See
-  // https://code.google.com/p/address-sanitizer/issues/detail?id=321.
-  int res = REAL(gethostbyname_r)(name, ret, buf, buflen, result, h_errnop);
-  if (result) {
-    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, result, sizeof(*result));
-    if (res == 0 && *result) write_hostent(ctx, *result);
-  }
-  if (h_errnop)
-    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, h_errnop, sizeof(*h_errnop));
-  return res;
-}
-
+#if SANITIZER_INTERCEPT_GETHOSTBYNAME2_R
 INTERCEPTOR(int, gethostbyname2_r, char *name, int af,
             struct __sanitizer_hostent *ret, char *buf, SIZE_T buflen,
             __sanitizer_hostent **result, int *h_errnop) {
@@ -1911,13 +1941,10 @@ INTERCEPTOR(int, gethostbyname2_r, char *name, int af,
     COMMON_INTERCEPTOR_WRITE_RANGE(ctx, h_errnop, sizeof(*h_errnop));
   return res;
 }
-#define INIT_GETHOSTBYNAME_R                  \
-  COMMON_INTERCEPT_FUNCTION(gethostent_r);    \
-  COMMON_INTERCEPT_FUNCTION(gethostbyaddr_r); \
-  COMMON_INTERCEPT_FUNCTION(gethostbyname_r); \
+#define INIT_GETHOSTBYNAME2_R                  \
   COMMON_INTERCEPT_FUNCTION(gethostbyname2_r);
 #else
-#define INIT_GETHOSTBYNAME_R
+#define INIT_GETHOSTBYNAME2_R
 #endif
 
 #if SANITIZER_INTERCEPT_GETSOCKOPT
@@ -3151,7 +3178,7 @@ INTERCEPTOR(int, initgroups, char *user, u32 group) {
 #define INIT_INITGROUPS
 #endif
 
-#if SANITIZER_INTERCEPT_ETHER
+#if SANITIZER_INTERCEPT_ETHER_NTOA_ATON
 INTERCEPTOR(char *, ether_ntoa, __sanitizer_ether_addr *addr) {
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, ether_ntoa, addr);
@@ -3168,6 +3195,14 @@ INTERCEPTOR(__sanitizer_ether_addr *, ether_aton, char *buf) {
   if (res) COMMON_INTERCEPTOR_INITIALIZE_RANGE(res, sizeof(*res));
   return res;
 }
+#define INIT_ETHER_NTOA_ATON             \
+  COMMON_INTERCEPT_FUNCTION(ether_ntoa); \
+  COMMON_INTERCEPT_FUNCTION(ether_aton);
+#else
+#define INIT_ETHER_NTOA_ATON
+#endif
+
+#if SANITIZER_INTERCEPT_ETHER_HOST
 INTERCEPTOR(int, ether_ntohost, char *hostname, __sanitizer_ether_addr *addr) {
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, ether_ntohost, hostname, addr);
@@ -3208,14 +3243,12 @@ INTERCEPTOR(int, ether_line, char *line, __sanitizer_ether_addr *addr,
   }
   return res;
 }
-#define INIT_ETHER                          \
-  COMMON_INTERCEPT_FUNCTION(ether_ntoa);    \
-  COMMON_INTERCEPT_FUNCTION(ether_aton);    \
+#define INIT_ETHER_HOST                     \
   COMMON_INTERCEPT_FUNCTION(ether_ntohost); \
   COMMON_INTERCEPT_FUNCTION(ether_hostton); \
   COMMON_INTERCEPT_FUNCTION(ether_line);
 #else
-#define INIT_ETHER
+#define INIT_ETHER_HOST
 #endif
 
 #if SANITIZER_INTERCEPT_ETHER_R
@@ -3676,6 +3709,14 @@ INTERCEPTOR(float, lgammaf_r, float x, int *signp) {
   if (signp) COMMON_INTERCEPTOR_WRITE_RANGE(ctx, signp, sizeof(*signp));
   return res;
 }
+#define INIT_LGAMMA_R                   \
+  COMMON_INTERCEPT_FUNCTION(lgamma_r);  \
+  COMMON_INTERCEPT_FUNCTION(lgammaf_r);
+#else
+#define INIT_LGAMMA_R
+#endif
+
+#if SANITIZER_INTERCEPT_LGAMMAL_R
 INTERCEPTOR(long double, lgammal_r, long double x, int *signp) {
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, lgammal_r, x, signp);
@@ -3686,12 +3727,9 @@ INTERCEPTOR(long double, lgammal_r, long double x, int *signp) {
   if (signp) COMMON_INTERCEPTOR_WRITE_RANGE(ctx, signp, sizeof(*signp));
   return res;
 }
-#define INIT_LGAMMA_R                   \
-  COMMON_INTERCEPT_FUNCTION(lgamma_r);  \
-  COMMON_INTERCEPT_FUNCTION(lgammaf_r); \
-  COMMON_INTERCEPT_FUNCTION(lgammal_r);
+#define INIT_LGAMMAL_R COMMON_INTERCEPT_FUNCTION(lgammal_r);
 #else
-#define INIT_LGAMMA_R
+#define INIT_LGAMMAL_R
 #endif
 
 #if SANITIZER_INTERCEPT_DRAND48_R
@@ -3827,7 +3865,11 @@ INTERCEPTOR(void *, __tls_get_addr, void *arg) {
   void *ctx;
   COMMON_INTERCEPTOR_ENTER(ctx, __tls_get_addr, arg);
   void *res = REAL(__tls_get_addr)(arg);
-  DTLS_on_tls_get_addr(arg, res);
+  DTLS::DTV *dtv = DTLS_on_tls_get_addr(arg, res);
+  if (dtv) {
+    // New DTLS block has been allocated.
+    COMMON_INTERCEPTOR_INITIALIZE_RANGE((void *)dtv->beg, dtv->size);
+  }
   return res;
 }
 #else
@@ -4599,6 +4641,50 @@ INTERCEPTOR(int, dlclose, void *handle) {
 #define INIT_DLOPEN_DLCLOSE
 #endif
 
+#if SANITIZER_INTERCEPT_GETPASS
+INTERCEPTOR(char *, getpass, const char *prompt) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, getpass, prompt);
+  if (prompt)
+    COMMON_INTERCEPTOR_READ_RANGE(ctx, prompt, REAL(strlen)(prompt)+1);
+  char *res = REAL(getpass)(prompt);
+  if (res) COMMON_INTERCEPTOR_INITIALIZE_RANGE(res, REAL(strlen)(res)+1);
+  return res;
+}
+
+#define INIT_GETPASS COMMON_INTERCEPT_FUNCTION(getpass);
+#else
+#define INIT_GETPASS
+#endif
+
+#if SANITIZER_INTERCEPT_TIMERFD
+INTERCEPTOR(int, timerfd_settime, int fd, int flags, void *new_value,
+            void *old_value) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, timerfd_settime, fd, flags, new_value,
+                           old_value);
+  COMMON_INTERCEPTOR_READ_RANGE(ctx, new_value, struct_itimerspec_sz);
+  int res = REAL(timerfd_settime)(fd, flags, new_value, old_value);
+  if (res != -1 && old_value)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, old_value, struct_itimerspec_sz);
+  return res;
+}
+
+INTERCEPTOR(int, timerfd_gettime, int fd, void *curr_value) {
+  void *ctx;
+  COMMON_INTERCEPTOR_ENTER(ctx, timerfd_gettime, fd, curr_value);
+  int res = REAL(timerfd_gettime)(fd, curr_value);
+  if (res != -1 && curr_value)
+    COMMON_INTERCEPTOR_WRITE_RANGE(ctx, curr_value, struct_itimerspec_sz);
+  return res;
+}
+#define INIT_TIMERFD                          \
+  COMMON_INTERCEPT_FUNCTION(timerfd_settime); \
+  COMMON_INTERCEPT_FUNCTION(timerfd_gettime);
+#else
+#define INIT_TIMERFD
+#endif
+
 static void InitializeCommonInterceptors() {
   static u64 metadata_mem[sizeof(MetadataHashMap) / sizeof(u64) + 1];
   interceptor_metadata_map = new((void *)&metadata_mem) MetadataHashMap();
@@ -4650,6 +4736,9 @@ static void InitializeCommonInterceptors() {
   INIT_GETSOCKNAME;
   INIT_GETHOSTBYNAME;
   INIT_GETHOSTBYNAME_R;
+  INIT_GETHOSTBYNAME2_R;
+  INIT_GETHOSTBYADDR_R;
+  INIT_GETHOSTENT_R;
   INIT_GETSOCKOPT;
   INIT_ACCEPT;
   INIT_ACCEPT4;
@@ -4701,7 +4790,8 @@ static void InitializeCommonInterceptors() {
   INIT_STATVFS;
   INIT_STATVFS64;
   INIT_INITGROUPS;
-  INIT_ETHER;
+  INIT_ETHER_NTOA_ATON;
+  INIT_ETHER_HOST;
   INIT_ETHER_R;
   INIT_SHMCTL;
   INIT_RANDOM_R;
@@ -4727,6 +4817,7 @@ static void InitializeCommonInterceptors() {
   INIT_REMQUO;
   INIT_LGAMMA;
   INIT_LGAMMA_R;
+  INIT_LGAMMAL_R;
   INIT_DRAND48_R;
   INIT_RAND_R;
   INIT_GETLINE;
@@ -4752,4 +4843,6 @@ static void InitializeCommonInterceptors() {
   INIT_FFLUSH;
   INIT_FCLOSE;
   INIT_DLOPEN_DLCLOSE;
+  INIT_GETPASS;
+  INIT_TIMERFD;
 }

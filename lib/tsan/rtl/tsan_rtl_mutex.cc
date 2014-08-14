@@ -118,7 +118,7 @@ void MutexDestroy(ThreadState *thr, uptr pc, uptr addr) {
   u64 mid = s->GetId();
   u32 last_lock = s->last_lock;
   if (!unlock_locked)
-    s->Reset();  // must not reset it before the report is printed
+    s->Reset(thr);  // must not reset it before the report is printed
   s->mtx.Unlock();
   if (unlock_locked) {
     ThreadRegistryLock l(ctx->thread_registry);
@@ -136,7 +136,7 @@ void MutexDestroy(ThreadState *thr, uptr pc, uptr addr) {
   if (unlock_locked) {
     SyncVar *s = ctx->metamap.GetIfExistsAndLock(addr);
     if (s != 0) {
-      s->Reset();
+      s->Reset(thr);
       s->mtx.Unlock();
     }
   }
@@ -172,7 +172,7 @@ void MutexLock(ThreadState *thr, uptr pc, uptr addr, int rec, bool try_lock) {
   }
   s->recursion += rec;
   thr->mset.Add(s->GetId(), true, thr->fast_state.epoch());
-  if (flags()->detect_deadlocks && s->recursion == 1) {
+  if (flags()->detect_deadlocks && (s->recursion - rec) == 0) {
     Callback cb(thr, pc);
     if (!try_lock)
       ctx->dd->MutexBeforeLock(&cb, &s->dd, true);
@@ -215,7 +215,7 @@ int MutexUnlock(ThreadState *thr, uptr pc, uptr addr, bool all) {
     }
   }
   thr->mset.Del(s->GetId(), true);
-  if (flags()->detect_deadlocks && s->recursion == 0) {
+  if (flags()->detect_deadlocks && s->recursion == 0 && !report_bad_unlock) {
     Callback cb(thr, pc);
     ctx->dd->MutexBeforeUnlock(&cb, &s->dd, true);
   }
@@ -224,7 +224,7 @@ int MutexUnlock(ThreadState *thr, uptr pc, uptr addr, bool all) {
   // Can't touch s after this point.
   if (report_bad_unlock)
     ReportMutexMisuse(thr, pc, ReportTypeMutexBadUnlock, addr, mid);
-  if (flags()->detect_deadlocks) {
+  if (flags()->detect_deadlocks && !report_bad_unlock) {
     Callback cb(thr, pc);
     ReportDeadlock(thr, pc, ctx->dd->GetReport(&cb));
   }
@@ -429,7 +429,7 @@ void AcquireImpl(ThreadState *thr, uptr pc, SyncClock *c) {
   if (thr->ignore_sync)
     return;
   thr->clock.set(thr->fast_state.epoch());
-  thr->clock.acquire(c);
+  thr->clock.acquire(&thr->clock_cache, c);
   StatInc(thr, StatSyncAcquire);
 }
 
@@ -438,7 +438,7 @@ void ReleaseImpl(ThreadState *thr, uptr pc, SyncClock *c) {
     return;
   thr->clock.set(thr->fast_state.epoch());
   thr->fast_synch_epoch = thr->fast_state.epoch();
-  thr->clock.release(c);
+  thr->clock.release(&thr->clock_cache, c);
   StatInc(thr, StatSyncRelease);
 }
 
@@ -447,7 +447,7 @@ void ReleaseStoreImpl(ThreadState *thr, uptr pc, SyncClock *c) {
     return;
   thr->clock.set(thr->fast_state.epoch());
   thr->fast_synch_epoch = thr->fast_state.epoch();
-  thr->clock.ReleaseStore(c);
+  thr->clock.ReleaseStore(&thr->clock_cache, c);
   StatInc(thr, StatSyncRelease);
 }
 
@@ -456,7 +456,7 @@ void AcquireReleaseImpl(ThreadState *thr, uptr pc, SyncClock *c) {
     return;
   thr->clock.set(thr->fast_state.epoch());
   thr->fast_synch_epoch = thr->fast_state.epoch();
-  thr->clock.acq_rel(c);
+  thr->clock.acq_rel(&thr->clock_cache, c);
   StatInc(thr, StatSyncAcquire);
   StatInc(thr, StatSyncRelease);
 }
